@@ -14,18 +14,18 @@ public class MiniRedisController {
         this.service = service;
     }
 
-    @PutMapping
+    @PutMapping("/SET")
     @ResponseStatus(HttpStatus.OK)
     private String set(@RequestParam String key, @RequestParam String value) {
         return service.setStringValue(key, value);
     }
 
-    @GetMapping("/{key}")
+    @GetMapping("/GET/{key}")
     private String getByKey(@PathVariable String key) {
         return service.getStringValue(key);
     }
 
-    @DeleteMapping("/{keys}")
+    @DeleteMapping("/DEL/{keys}")
     private Integer delByKey(@PathVariable String[] keys) {
         return service.del(keys);
     }
@@ -33,5 +33,10 @@ public class MiniRedisController {
     @GetMapping("/DBSIZE")
     private Integer getDbSize() {
         return service.dbsize();
+    }
+
+    @PutMapping("/INCR/{key}")
+    private String incr(@PathVariable String key) throws Exception {
+        return service.incr(key);
     }
 }

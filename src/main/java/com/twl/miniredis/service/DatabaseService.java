@@ -1,5 +1,6 @@
 package com.twl.miniredis.service;
 
+import com.twl.miniredis.exception.NonNumericValueException;
 import com.twl.miniredis.repository.DatabaseRepository;
 import org.springframework.stereotype.Service;
 
@@ -30,5 +31,9 @@ public class DatabaseService {
 
     public Integer dbsize() {
         return repository.dbsize();
+    }
+
+    public String incr(String key) throws NonNumericValueException {
+        return repository.incr(key);
     }
 }
