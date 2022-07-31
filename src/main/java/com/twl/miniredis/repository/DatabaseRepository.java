@@ -11,6 +11,11 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+/**
+ * Method documentations from <a href="https://redis.io/commands/">Redis commands page</a>.
+ *
+ * @author Tiago Wolker
+ */
 @Repository
 @Log4j2
 public class DatabaseRepository {
@@ -41,10 +46,16 @@ public class DatabaseRepository {
      * Removes the specified keys. A key is ignored if it does not exist.
      * @param keys
      */
-    public void del(String... keys) {
+    public int del(String... keys) {
+        int deletions = 0;
         for (String key : keys) {
-            Database.getStringValues().remove(key);
+            String value = Database.getStringValues().get(key);
+            if (value != null) {
+                Database.getStringValues().remove(key);
+                deletions++;
+            }
         }
+        return deletions;
     }
 
     /**
