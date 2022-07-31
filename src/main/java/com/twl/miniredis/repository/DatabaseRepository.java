@@ -1,15 +1,14 @@
 package com.twl.miniredis.repository;
 
 import com.twl.miniredis.db.Database;
+import com.twl.miniredis.exception.BusinessException;
 import com.twl.miniredis.exception.NonNumericValueException;
 import com.twl.miniredis.model.dto.ScoreMember;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Repository;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
+import java.util.TreeMap;
 
 /**
  * Method documentations from <a href="https://redis.io/commands/">Redis commands page</a>.
@@ -26,8 +25,8 @@ public class DatabaseRepository {
      * @param key
      * @param value
      */
-    public void setStringValue(String key, String value) {
-        Database.getStringValues().put(key, value); //TODO
+    public void setStringValue(String key, Object value) {
+        Database.getValues().put(key, value);
     }
 
     /**
@@ -36,8 +35,23 @@ public class DatabaseRepository {
      * @param key
      * @return String value stored in given key.
      */
-    public String getStringValue(String key) {
-        return Database.getStringValues().get(key);
+    public String getStringValue(String key) throws BusinessException {
+        Object value = Database.getValues().get(key);
+        if (value != null) {
+            if (String.class.equals(value.getClass())) {
+                return value.toString();
+            } else {
+                try {
+                    Double num = Double.valueOf(value.toString());
+                    return num.toString();
+                } catch (NumberFormatException e) {
+                    String message = "Value can`t be resolved as a string. If you`re trying to get a zset, try using ZRANGE instead.";
+                    log.error(message);
+                    throw new BusinessException(message);
+                }
+            }
+        }
+        return null; // TODO - verificar possivel retorno de exception
     }
 
     // TODO - SET key value EX seconds
@@ -49,10 +63,10 @@ public class DatabaseRepository {
     public int del(String... keys) {
         int deletions = 0;
         for (String key : keys) {
-            String value = Database.getStringValues().get(key);
+            Object value = Database.getValues().get(key);
             if (value != null) {
-                Database.getStringValues().remove(key);
-                deletions++;
+                Database.getValues().remove(key);
+                deletions++; //TODO caso seja um `zset` incrementar quantos registros tinham neste
             }
         }
         return deletions;
@@ -62,7 +76,7 @@ public class DatabaseRepository {
      * @return Return the number of keys in the currently-selected database.
      */
     public Integer dbsize() {
-        return Database.getStringValues().size();
+        return Database.getValues().size();
     }
 
     /**
@@ -77,12 +91,12 @@ public class DatabaseRepository {
      * is no overhead for storing the string representation of the integer.
      * @param key
      */
-    public String incr(String key) throws NonNumericValueException {
-        String value = Database.getStringValues().get(key);
+    public String incr(String key) throws NonNumericValueException, BusinessException {
+        Object value = Database.getValues().get(key);
         try {
-            int numericValue = Integer.parseInt(value);
+            int numericValue = Integer.parseInt(value.toString());
             numericValue++;
-            Database.getStringValues().put(key, String.valueOf(numericValue));
+            Database.getValues().put(key, String.valueOf(numericValue));
             return this.getStringValue(key);
         } catch (NumberFormatException e) {
             log.error(e);
@@ -103,10 +117,11 @@ public class DatabaseRepository {
      * values are valid values as well.
      *
      * @param key
-     * @param scoreMember List of {@link ScoreMember} to be added
+     * @param scoreMember A {@link TreeMap} where its key represents the member and value represents the score.
      */
-    public void zadd(String key, List<ScoreMember> scoreMember) {
-        Database.getZset().put(key, scoreMember);
+    public void zadd(String key, TreeMap<String, Double> scoreMember) {
+        Database.getValues().put(key, scoreMember);
+//        Collections.sort(new ArrayList<>(Database.getZset().get(key).entrySet()), new TreeMapValueKeyComparator<>());
     }
 
     /**
@@ -114,7 +129,8 @@ public class DatabaseRepository {
      * @return Returns the sorted set cardinality (number of elements) of the sorted set stored at key.
      */
     public Integer zcard(String key) {
-        return Database.getZset().get(key).size();
+//        return Database.getValues().get(key).size();
+        return null;//TODO
     }
 
     /**
@@ -124,11 +140,12 @@ public class DatabaseRepository {
      * The rank (or index) is 0-based, which means that the member with the lowest score has rank 0.
      */
     public Integer zrank(String key, String member) {
-        List<ScoreMember> scoreMemberList = Database.getZset().get(key);
-        return IntStream.range(0, scoreMemberList.size())
-                .filter(scoreMember -> member.equals(scoreMemberList.get(scoreMember).getMember()))
-                .findFirst()
-                .orElse(-1);// TODO refinar retorno
+//        List<ScoreMember> scoreMemberList = Database.getZset().get(key);
+//        return IntStream.range(0, scoreMemberList.size())
+//                .filter(scoreMember -> member.equals(scoreMemberList.get(scoreMember).getMember()))
+//                .findFirst()
+//                .orElse(-1);// TODO refinar retorno
+        return null;//TODO
     }
 
     /**
@@ -151,26 +168,27 @@ public class DatabaseRepository {
      * @return Returns the specified range of elements in the sorted set stored at <b>key</b>.
      */
     public List<ScoreMember> zrange(String key, int start, int stop) {
-        List<ScoreMember> zset = Database.getZset().get(key);
-        if (zset == null || zset.isEmpty()) {
-            return new ArrayList<>();
-        }
-        int size = zset.size();
-        if (start > size && start > stop) {
-            return new ArrayList<>();
-        }
-        int lastElement = stop;
-        if (lastElement > size) {
-            lastElement = size - 1;
-        } else if (lastElement < 0) {
-            lastElement = size - 1 + stop;
-            if (lastElement < 0 || lastElement < start) {
-                return new ArrayList<>();
-            }
-        }
-        return IntStream.range(start, lastElement)
-                .mapToObj(zset::get)
-                .collect(Collectors.toList());
+//        List<ScoreMember> zset = Database.getZset().get(key);
+//        if (zset == null || zset.isEmpty()) {
+//            return new ArrayList<>();
+//        }
+//        int size = zset.size();
+//        if (start > size && start > stop) {
+//            return new ArrayList<>();
+//        }
+//        int lastElement = stop;
+//        if (lastElement > size) {
+//            lastElement = size - 1;
+//        } else if (lastElement < 0) {
+//            lastElement = size - 1 + stop;
+//            if (lastElement < 0 || lastElement < start) {
+//                return new ArrayList<>();
+//            }
+//        }
+//        return IntStream.range(start, lastElement)
+//                .mapToObj(zset::get)
+//                .collect(Collectors.toList());
+        return null;//TODO
     }
 
 }
