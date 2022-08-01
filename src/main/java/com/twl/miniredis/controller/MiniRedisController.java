@@ -1,6 +1,7 @@
 package com.twl.miniredis.controller;
 
 import com.twl.miniredis.exception.BusinessException;
+import com.twl.miniredis.exception.NotFoundException;
 import com.twl.miniredis.service.DatabaseService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -49,5 +50,10 @@ public class MiniRedisController {
     @GetMapping("/ZCARD/{key}")
     private Integer zcard(@PathVariable String key) throws BusinessException {
         return service.zcard(key);
+    }
+
+    @GetMapping("/ZRANK/{key}")
+    private Integer zrank(@PathVariable String key, @RequestParam String member) throws NotFoundException, BusinessException {
+        return service.zrank(key, member);
     }
 }

@@ -2,6 +2,7 @@ package com.twl.miniredis.service;
 
 import com.twl.miniredis.exception.BusinessException;
 import com.twl.miniredis.exception.NonNumericValueException;
+import com.twl.miniredis.exception.NotFoundException;
 import com.twl.miniredis.repository.DatabaseRepository;
 import com.twl.miniredis.service.comparator.MapValueKeyComparator;
 import lombok.extern.log4j.Log4j2;
@@ -21,6 +22,8 @@ public class DatabaseService {
     public DatabaseService(DatabaseRepository repository) {
         this.repository = repository;
     }
+
+    // TODO: mover mensagens para arquivo properties.
 
     public String setStringValue(String key, Object value) throws BusinessException {
         repository.setStringValue(key, value);
@@ -91,5 +94,22 @@ public class DatabaseService {
 
     public Integer zcard(String key) throws BusinessException {
         return repository.zcard(key);
+    }
+
+    public Integer zrank(String key, String member) throws NotFoundException, BusinessException {
+        Integer zrank = repository.zrank(key, member);
+        if (zrank == null) {
+
+            String message = "Key not found in database.";
+            log.warn(message);
+            throw new NotFoundException(message);
+        } else if (zrank.equals(-1)) {
+
+            String message = "(nil) Member not found in zset.";
+            log.warn(message);
+            throw new NotFoundException(message);
+        } else {
+            return zrank;
+        }
     }
 }

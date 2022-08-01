@@ -7,9 +7,8 @@ import com.twl.miniredis.model.dto.ScoreMember;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Repository;
 
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.TreeMap;
+import java.util.*;
+import java.util.stream.IntStream;
 
 /**
  * Method documentations from <a href="https://redis.io/commands/">Redis commands page</a>.
@@ -135,17 +134,9 @@ public class DatabaseRepository {
      * @return the cardinality (number of elements) of the sorted set, or 0 if key does not exist.
      */
     public Integer zcard(String key) throws BusinessException {
-        Object value = Database.getValues().get(key);
+        LinkedHashMap<String, Double> value = this.getZset(key);
         if (value != null) {
-            if (LinkedHashMap.class.equals(value.getClass())) {
-
-                return ((LinkedHashMap) value).size();
-            } else {
-
-                String message = "Value stored in given key does not represent a zset.";
-                log.error(message);
-                throw new BusinessException(message);
-            }
+            return value.size();
         } else {
             return 0;
         }
@@ -157,13 +148,16 @@ public class DatabaseRepository {
      * @return Returns the rank of member in the sorted set stored at key, with the scores ordered from low to high.
      * The rank (or index) is 0-based, which means that the member with the lowest score has rank 0.
      */
-    public Integer zrank(String key, String member) {
-//        List<ScoreMember> scoreMemberList = Database.getZset().get(key);
-//        return IntStream.range(0, scoreMemberList.size())
-//                .filter(scoreMember -> member.equals(scoreMemberList.get(scoreMember).getMember()))
-//                .findFirst()
-//                .orElse(-1);// TODO refinar retorno
-        return null;//TODO
+    public Integer zrank(String key, String member) throws BusinessException {
+        LinkedHashMap<String, Double> zset = this.getZset(key);
+        if (zset != null) {
+            List<Map.Entry<String, Double>> list = new ArrayList<>(zset.entrySet());
+            return IntStream.range(0, list.size())
+                    .filter(value -> member.equals(list.get(value).getKey()))
+                    .findFirst()
+                    .orElse(-1);
+        }
+        return null;
     }
 
     /**
@@ -207,6 +201,21 @@ public class DatabaseRepository {
 //                .mapToObj(zset::get)
 //                .collect(Collectors.toList());
         return null;//TODO
+    }
+
+    private LinkedHashMap<String, Double> getZset(String key) throws BusinessException {
+        Object value = Database.getValues().get(key);
+        if (value != null) {
+            if (LinkedHashMap.class.equals(value.getClass())) {
+
+                return (LinkedHashMap<String, Double>) value;
+            } else {
+                String message = "Value stored in given key does not represent a zset.";
+                log.error(message);
+                throw new BusinessException(message);
+            }
+        }
+        return null;
     }
 
 }
