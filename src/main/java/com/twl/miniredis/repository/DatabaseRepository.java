@@ -8,6 +8,7 @@ import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Repository;
 
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 /**
@@ -51,7 +52,7 @@ public class DatabaseRepository {
                 }
             }
         }
-        return null; // TODO - verificar possivel retorno de exception
+        return null;
     }
 
     // TODO - SET key value EX seconds
@@ -179,28 +180,37 @@ public class DatabaseRepository {
      * @param stop Ending index range
      * @return Returns the specified range of elements in the sorted set stored at <b>key</b>.
      */
-    public List<ScoreMember> zrange(String key, int start, int stop) {
-//        List<ScoreMember> zset = Database.getZset().get(key);
-//        if (zset == null || zset.isEmpty()) {
-//            return new ArrayList<>();
-//        }
-//        int size = zset.size();
-//        if (start > size && start > stop) {
-//            return new ArrayList<>();
-//        }
-//        int lastElement = stop;
-//        if (lastElement > size) {
-//            lastElement = size - 1;
-//        } else if (lastElement < 0) {
-//            lastElement = size - 1 + stop;
-//            if (lastElement < 0 || lastElement < start) {
-//                return new ArrayList<>();
-//            }
-//        }
-//        return IntStream.range(start, lastElement)
-//                .mapToObj(zset::get)
-//                .collect(Collectors.toList());
-        return null;//TODO
+    public LinkedHashMap<String, Double> zrange(String key, int start, int stop) throws BusinessException {
+        LinkedHashMap<String, Double> zset = getZset(key);
+        if (zset != null) {
+
+            List<Map.Entry<String, Double>> list = new ArrayList<>(zset.entrySet());
+
+            if (list.isEmpty()) {
+                return new LinkedHashMap<>();
+            }
+            int size = list.size();
+            if (start > size && start > stop) {
+                return new LinkedHashMap<>();
+            }
+            int lastElement = stop;
+            if (lastElement > size) {
+                lastElement = size - 1;
+            } else if (lastElement < 0) {
+                lastElement = size - 1 + stop;
+                if (lastElement < 0 || lastElement < start) {
+                    return new LinkedHashMap<>();
+                }
+            }
+
+            LinkedHashMap<String, Double> zsetRange = new LinkedHashMap<>();
+            IntStream.rangeClosed(start, lastElement)
+                    .mapToObj(list::get)
+                    .collect(Collectors.toList())
+                    .forEach(entry -> zsetRange.put(entry.getKey(), entry.getValue()));
+            return zsetRange;
+        }
+        return new LinkedHashMap<>();
     }
 
     private LinkedHashMap<String, Double> getZset(String key) throws BusinessException {

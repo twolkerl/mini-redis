@@ -6,6 +6,8 @@ import com.twl.miniredis.service.DatabaseService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashMap;
+
 @RestController
 @RequestMapping
 public class MiniRedisController {
@@ -18,12 +20,12 @@ public class MiniRedisController {
 
     @PutMapping("/SET")
     @ResponseStatus(HttpStatus.OK)
-    private String set(@RequestParam String key, @RequestParam String value) throws BusinessException {
+    private String set(@RequestParam String key, @RequestParam String value) throws BusinessException, NotFoundException {
         return service.setStringValue(key, value);
     }
 
     @GetMapping("/GET/{key}")
-    private String getByKey(@PathVariable String key) throws BusinessException {
+    private String getByKey(@PathVariable String key) throws BusinessException, NotFoundException {
         return service.getStringValue(key);
     }
 
@@ -55,5 +57,12 @@ public class MiniRedisController {
     @GetMapping("/ZRANK/{key}")
     private Integer zrank(@PathVariable String key, @RequestParam String member) throws NotFoundException, BusinessException {
         return service.zrank(key, member);
+    }
+
+    @GetMapping("/ZRANGE/{key}")
+    private LinkedHashMap<String, Double> zrange(@PathVariable String key, @RequestParam int start, @RequestParam int stop)
+            throws BusinessException, NotFoundException {
+
+        return service.zrange(key, start, stop);
     }
 }
