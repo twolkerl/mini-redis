@@ -7,6 +7,7 @@ import com.twl.miniredis.model.dto.ScoreMember;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Repository;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.TreeMap;
 
@@ -104,7 +105,6 @@ public class DatabaseRepository {
         }
     }
 
-    // TODO - ZADD: Verificar se a utilização de LinkedList é uma opção melhor
     /**
      * Adds all the specified members with the specified scores to the sorted set stored at key. It is possible to
      * specify multiple score / member pairs. If a specified member is already a member of the sorted set, the score is
@@ -124,13 +124,31 @@ public class DatabaseRepository {
 //        Collections.sort(new ArrayList<>(Database.getZset().get(key).entrySet()), new TreeMapValueKeyComparator<>());
     }
 
+    public Object getObject(String key) {
+        return Database.getValues().get(key);
+    }
+
     /**
+     * Returns the sorted set cardinality (number of elements) of the sorted set stored at key.
+     *
      * @param key
-     * @return Returns the sorted set cardinality (number of elements) of the sorted set stored at key.
+     * @return the cardinality (number of elements) of the sorted set, or 0 if key does not exist.
      */
-    public Integer zcard(String key) {
-//        return Database.getValues().get(key).size();
-        return null;//TODO
+    public Integer zcard(String key) throws BusinessException {
+        Object value = Database.getValues().get(key);
+        if (value != null) {
+            if (LinkedHashMap.class.equals(value.getClass())) {
+
+                return ((LinkedHashMap) value).size();
+            } else {
+
+                String message = "Value stored in given key does not represent a zset.";
+                log.error(message);
+                throw new BusinessException(message);
+            }
+        } else {
+            return 0;
+        }
     }
 
     /**

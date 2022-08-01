@@ -45,4 +45,9 @@ public class MiniRedisController {
     private Integer zadd(@PathVariable String key, @RequestParam String... values) throws Exception {
         return service.zadd(key, values);
     }
+
+    @GetMapping("/ZCARD/{key}")
+    private Integer zcard(@PathVariable String key) throws BusinessException {
+        return service.zcard(key);
+    }
 }

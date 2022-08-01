@@ -3,10 +3,11 @@ package com.twl.miniredis.service;
 import com.twl.miniredis.exception.BusinessException;
 import com.twl.miniredis.exception.NonNumericValueException;
 import com.twl.miniredis.repository.DatabaseRepository;
+import com.twl.miniredis.service.comparator.MapValueKeyComparator;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Service;
 
-import java.util.TreeMap;
+import java.util.*;
 
 /**
  * @author Tiago Wolker
@@ -48,9 +49,11 @@ public class DatabaseService {
             log.error(message);
             throw new BusinessException(message);
         } else {
-//            TreeMap<String, Double> zset = repository.
-            // TODO - obter lista existente para substituir valores das chaves caso já existam
-            TreeMap<String, Double> zset = new TreeMap<>();
+            Object existingKeyValue = repository.getObject(key);
+            LinkedHashMap<String, Double> zset = new LinkedHashMap<>();
+            if (existingKeyValue != null &&LinkedHashMap.class.equals(existingKeyValue.getClass())) {
+                zset = (LinkedHashMap<String, Double>) existingKeyValue;
+            }
             int valuesSaved = 0;
             Double score = null;
             for (int i = 0; i < scoreMembers.length; i++) {
@@ -71,11 +74,22 @@ public class DatabaseService {
                     }
                 }
             }
-            // TODO - ordenar lista
+            // FIXME: Refatorar para uma maneira mais performática.
+            List<Map.Entry<String, Double>> list = new ArrayList<>(zset.entrySet());
+            Collections.sort(list, new MapValueKeyComparator<String, Double>());
+
+            zset.clear();
+            for (Map.Entry<String, Double> entry : list) {
+                zset.put(entry.getKey(), entry.getValue());
+            }
             if (valuesSaved > 0) {
                 repository.setStringValue(key, zset);
             }
             return valuesSaved;
         }
+    }
+
+    public Integer zcard(String key) throws BusinessException {
+        return repository.zcard(key);
     }
 }
