@@ -4,6 +4,7 @@ import com.twl.miniredis.db.Database;
 import com.twl.miniredis.exception.BusinessException;
 import com.twl.miniredis.exception.NonNumericValueException;
 import com.twl.miniredis.model.dto.ScoreMember;
+import com.twl.miniredis.service.comparator.MapValueKeyComparator;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Repository;
 
@@ -19,6 +20,9 @@ import java.util.stream.IntStream;
 @Repository
 @Log4j2
 public class DatabaseRepository {
+
+    public static final String INVALID_NUMBER_OF_ARGUMENTS_FOR_METHOD_ZADD = "Invalid number of arguments for method ZADD key score1 member1 score2 member2 ... .";
+    public static final String INVALID_SCORE_PROVIDED = "Invalid score provided. Score must be a number.";
 
     /**
      * Set key to hold the string value. If key already holds a value, it is overwritten, regardless of its type.
@@ -66,8 +70,12 @@ public class DatabaseRepository {
         for (String key : keys) {
             Object value = Database.getValues().get(key);
             if (value != null) {
+                if (LinkedHashMap.class.equals(value.getClass())) {
+                    deletions += (((LinkedHashMap) value).size());
+                } else {
+                    deletions++;
+                }
                 Database.getValues().remove(key);
-                deletions++; //TODO caso seja um `zset` incrementar quantos registros tinham neste
             }
         }
         return deletions;
@@ -117,11 +125,55 @@ public class DatabaseRepository {
      * values are valid values as well.
      *
      * @param key
-     * @param scoreMember A {@link TreeMap} where its key represents the member and value represents the score.
+     * @param scoreMembers score1, member1, score2, member2 ...
      */
-    public void zadd(String key, TreeMap<String, Double> scoreMember) {
-        Database.getValues().put(key, scoreMember);
-//        Collections.sort(new ArrayList<>(Database.getZset().get(key).entrySet()), new TreeMapValueKeyComparator<>());
+    public Integer zadd(String key, String... scoreMembers) throws BusinessException {
+        if (scoreMembers == null || scoreMembers.length < 2) {
+            log.error(INVALID_NUMBER_OF_ARGUMENTS_FOR_METHOD_ZADD);
+            throw new BusinessException(INVALID_NUMBER_OF_ARGUMENTS_FOR_METHOD_ZADD);
+        } else {
+            Object existingKeyValue = this.getObject(key);
+            LinkedHashMap<String, Double> zset = new LinkedHashMap<>();
+            if (existingKeyValue != null) {
+                if (LinkedHashMap.class.equals(existingKeyValue.getClass())) {
+                    zset = (LinkedHashMap<String, Double>) existingKeyValue;
+                } else {
+                    throw new BusinessException("The given key does not hold a zset, thus can not be modified. Try `SET key value` instead.");
+                }
+            }
+            int valuesSaved = 0;
+            Double score = null;
+            for (int i = 0; i < scoreMembers.length; i++) {
+                if ((i+1) % 2 != 0) {
+                    try {
+                        score = Double.parseDouble(scoreMembers[i]);
+                    } catch (NumberFormatException e) {
+                        log.warn(INVALID_SCORE_PROVIDED);
+                        score = null;
+                    }
+                } else {
+                    if (score != null) {
+                        zset.put(scoreMembers[i], score);
+                        valuesSaved++;
+                        score = null;
+                    } else {
+                        log.warn("No valid score provided for member \"{}\". Member will not be added.", scoreMembers[i]);
+                    }
+                }
+            }
+            // FIXME: Refatorar para uma maneira mais performática.
+            List<Map.Entry<String, Double>> list = new ArrayList<>(zset.entrySet());
+            Collections.sort(list, new MapValueKeyComparator<String, Double>());
+
+            zset.clear();
+            for (Map.Entry<String, Double> entry : list) {
+                zset.put(entry.getKey(), entry.getValue());
+            }
+            if (valuesSaved > 0) {
+                this.setStringValue(key, zset);
+            }
+            return valuesSaved;
+        }
     }
 
     public Object getObject(String key) {
