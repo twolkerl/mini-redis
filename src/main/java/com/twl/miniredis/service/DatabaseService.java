@@ -3,6 +3,7 @@ package com.twl.miniredis.service;
 import com.twl.miniredis.exception.BusinessException;
 import com.twl.miniredis.exception.NonNumericValueException;
 import com.twl.miniredis.exception.NotFoundException;
+import com.twl.miniredis.model.dto.ExpirableValue;
 import com.twl.miniredis.repository.DatabaseRepository;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Service;
@@ -28,15 +29,15 @@ public class DatabaseService {
     }
 
 
-    public String setStringValue(String key, Object value) throws BusinessException, NotFoundException {
-        repository.setStringValue(key, value);
+    public String setKeyValue(String key, Object value, Integer exSeconds) throws BusinessException, NotFoundException {
+        repository.setKeyValue(key, value, exSeconds);
         return this.getStringValue(key);
     }
 
     public String getStringValue(String key) throws BusinessException, NotFoundException {
-        String value = repository.getStringValue(key);
-        if (value != null) {
-            return value;
+        ExpirableValue expirableValue = repository.getKey(key);
+        if (expirableValue != null && expirableValue.getValue() != null) {
+            return String.valueOf(expirableValue.getValue());
         } else {
             log.warn(KEY_DOES_NOT_EXIST);
             throw new NotFoundException(KEY_DOES_NOT_EXIST);
@@ -52,7 +53,8 @@ public class DatabaseService {
     }
 
     public String incr(String key) throws NonNumericValueException, BusinessException {
-        return repository.incr(key);
+        ExpirableValue expirableValue = repository.incr(key);
+        return expirableValue == null || expirableValue.getValue() == null ? "0" : String.valueOf(expirableValue.getValue());
     }
 
     public Integer zadd(String key, String... scoreMembers) throws BusinessException {

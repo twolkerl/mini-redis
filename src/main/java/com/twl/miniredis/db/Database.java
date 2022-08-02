@@ -2,8 +2,8 @@ package com.twl.miniredis.db;
 
 import lombok.Getter;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * Final class that represents the in-memory database.
@@ -13,9 +13,9 @@ import java.util.Map;
 public final class Database {
 
     @Getter
-    private static Map<String, Object> values = new HashMap<>();
+    private static ConcurrentMap<String, Object> values = new ConcurrentHashMap<>();
 
     private Database() {
-        values = new HashMap<>();
+        values = new ConcurrentHashMap<>();
     }
 }

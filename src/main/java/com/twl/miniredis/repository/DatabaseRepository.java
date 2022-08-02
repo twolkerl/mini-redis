@@ -3,12 +3,15 @@ package com.twl.miniredis.repository;
 import com.twl.miniredis.db.Database;
 import com.twl.miniredis.exception.BusinessException;
 import com.twl.miniredis.exception.NonNumericValueException;
-import com.twl.miniredis.model.dto.ScoreMember;
+import com.twl.miniredis.model.dto.ExpirableValue;
 import com.twl.miniredis.service.comparator.MapValueKeyComparator;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -30,8 +33,12 @@ public class DatabaseRepository {
      * @param key
      * @param value
      */
-    public void setStringValue(String key, Object value) {
-        Database.getValues().put(key, value);
+    public void setKeyValue(String key, Object value, Integer exSeconds) {
+        LocalDateTime expireTime = null;
+        if (exSeconds != null) {
+            expireTime = LocalDateTime.now().plusSeconds(exSeconds);
+        }
+        this.setValue(key, value, expireTime);
     }
 
     /**
@@ -40,26 +47,19 @@ public class DatabaseRepository {
      * @param key
      * @return String value stored in given key.
      */
-    public String getStringValue(String key) throws BusinessException {
+    public ExpirableValue getKey(String key) throws BusinessException {
         Object value = Database.getValues().get(key);
         if (value != null) {
-            if (String.class.equals(value.getClass())) {
-                return value.toString();
+            if (ExpirableValue.class.equals(value.getClass())) {
+                return (ExpirableValue) value;
             } else {
-                try {
-                    Double num = Double.valueOf(value.toString());
-                    return num.toString();
-                } catch (NumberFormatException e) {
-                    String message = "Value can`t be resolved as a string. If you`re trying to get a zset, try using ZRANGE instead.";
-                    log.error(message);
-                    throw new BusinessException(message);
-                }
+                String message = "Value can`t be resolved as a string. If you`re trying to get a zset, try using ZRANGE instead.";
+                log.error(message);
+                throw new BusinessException(message);
             }
         }
         return null;
     }
-
-    // TODO - SET key value EX seconds
 
     /**
      * Removes the specified keys. A key is ignored if it does not exist.
@@ -100,13 +100,13 @@ public class DatabaseRepository {
      * is no overhead for storing the string representation of the integer.
      * @param key
      */
-    public String incr(String key) throws NonNumericValueException, BusinessException {
-        Object value = Database.getValues().get(key);
+    public ExpirableValue incr(String key) throws NonNumericValueException, BusinessException {
         try {
-            int numericValue = Integer.parseInt(value.toString());
+            ExpirableValue expirableValue = this.getKey(key);
+            int numericValue = Integer.parseInt(String.valueOf(expirableValue.getValue()));
             numericValue++;
-            Database.getValues().put(key, String.valueOf(numericValue));
-            return this.getStringValue(key);
+            this.setValue(key, numericValue, expirableValue.getExpireTime());
+            return this.getKey(key);
         } catch (NumberFormatException e) {
             log.error(e);
             throw new NonNumericValueException(e);
@@ -133,10 +133,10 @@ public class DatabaseRepository {
             throw new BusinessException(INVALID_NUMBER_OF_ARGUMENTS_FOR_METHOD_ZADD);
         } else {
             Object existingKeyValue = this.getObject(key);
-            LinkedHashMap<String, Double> zset = new LinkedHashMap<>();
+            ConcurrentMap<String, Double> zset = new ConcurrentHashMap<>();
             if (existingKeyValue != null) {
-                if (LinkedHashMap.class.equals(existingKeyValue.getClass())) {
-                    zset = (LinkedHashMap<String, Double>) existingKeyValue;
+                if (ConcurrentHashMap.class.equals(existingKeyValue.getClass())) {
+                    zset = (ConcurrentHashMap<String, Double>) existingKeyValue;
                 } else {
                     throw new BusinessException("The given key does not hold a zset, thus can not be modified. Try `SET key value` instead.");
                 }
@@ -161,22 +161,14 @@ public class DatabaseRepository {
                     }
                 }
             }
-            // FIXME: Refatorar para uma maneira mais performática.
-            List<Map.Entry<String, Double>> list = new ArrayList<>(zset.entrySet());
-            Collections.sort(list, new MapValueKeyComparator<String, Double>());
-
-            zset.clear();
-            for (Map.Entry<String, Double> entry : list) {
-                zset.put(entry.getKey(), entry.getValue());
-            }
             if (valuesSaved > 0) {
-                this.setStringValue(key, zset);
+                Database.getValues().put(key, new ExpirableValue(zset, null));
             }
             return valuesSaved;
         }
     }
 
-    public Object getObject(String key) {
+    private Object getObject(String key) {
         return Database.getValues().get(key);
     }
 
@@ -187,7 +179,7 @@ public class DatabaseRepository {
      * @return the cardinality (number of elements) of the sorted set, or 0 if key does not exist.
      */
     public Integer zcard(String key) throws BusinessException {
-        LinkedHashMap<String, Double> value = this.getZset(key);
+        ConcurrentHashMap<String, Double> value = this.getZset(key);
         if (value != null) {
             return value.size();
         } else {
@@ -197,14 +189,14 @@ public class DatabaseRepository {
 
     /**
      * @param key
-     * @param member {@link ScoreMember#getMember()}
+     * @param member
      * @return Returns the rank of member in the sorted set stored at key, with the scores ordered from low to high.
      * The rank (or index) is 0-based, which means that the member with the lowest score has rank 0.
      */
     public Integer zrank(String key, String member) throws BusinessException {
-        LinkedHashMap<String, Double> zset = this.getZset(key);
+        ConcurrentHashMap<String, Double> zset = this.getZset(key);
         if (zset != null) {
-            List<Map.Entry<String, Double>> list = new ArrayList<>(zset.entrySet());
+            List<Map.Entry<String, Double>> list = new ArrayList<>(sortedMap(zset).entrySet());
             return IntStream.range(0, list.size())
                     .filter(value -> member.equals(list.get(value).getKey()))
                     .findFirst()
@@ -233,10 +225,10 @@ public class DatabaseRepository {
      * @return Returns the specified range of elements in the sorted set stored at <b>key</b>.
      */
     public LinkedHashMap<String, Double> zrange(String key, int start, int stop) throws BusinessException {
-        LinkedHashMap<String, Double> zset = getZset(key);
+        ConcurrentHashMap<String, Double> zset = getZset(key);
         if (zset != null) {
 
-            List<Map.Entry<String, Double>> list = new ArrayList<>(zset.entrySet());
+            List<Map.Entry<String, Double>> list = new ArrayList<>(sortedMap(zset).entrySet());
 
             if (list.isEmpty()) {
                 return new LinkedHashMap<>();
@@ -246,10 +238,10 @@ public class DatabaseRepository {
                 return new LinkedHashMap<>();
             }
             int lastElement = stop;
-            if (lastElement > size) {
+            if (lastElement >= size) {
                 lastElement = size - 1;
             } else if (lastElement < 0) {
-                lastElement = size - 1 + stop;
+                lastElement = size + stop;
                 if (lastElement < 0 || lastElement < start) {
                     return new LinkedHashMap<>();
                 }
@@ -265,12 +257,12 @@ public class DatabaseRepository {
         return new LinkedHashMap<>();
     }
 
-    private LinkedHashMap<String, Double> getZset(String key) throws BusinessException {
-        Object value = Database.getValues().get(key);
-        if (value != null) {
-            if (LinkedHashMap.class.equals(value.getClass())) {
+    private ConcurrentHashMap<String, Double> getZset(String key) throws BusinessException {
+        ExpirableValue expirableValue = this.getKey(key);
+        if (expirableValue != null && expirableValue.getValue() != null) {
+            if (ConcurrentHashMap.class.equals(expirableValue.getValue().getClass())) {
 
-                return (LinkedHashMap<String, Double>) value;
+                return (ConcurrentHashMap<String, Double>) expirableValue.getValue() ;
             } else {
                 String message = "Value stored in given key does not represent a zset.";
                 log.error(message);
@@ -278,6 +270,21 @@ public class DatabaseRepository {
             }
         }
         return null;
+    }
+
+    private static LinkedHashMap<String, Double> sortedMap(ConcurrentMap<String, Double> zset) {
+        List<Map.Entry<String, Double>> list = new ArrayList<>(zset.entrySet());
+        Collections.sort(list, new MapValueKeyComparator<String, Double>());
+        LinkedHashMap<String, Double> ordered = new LinkedHashMap<>();
+
+        for (Map.Entry<String, Double> entry : list) {
+            ordered.put(entry.getKey(), entry.getValue());
+        }
+        return ordered;
+    }
+
+    private void setValue(String key, Object value, LocalDateTime expireTime) {
+        Database.getValues().put(key, new ExpirableValue(String.valueOf(value), expireTime));
     }
 
 }

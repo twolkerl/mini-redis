@@ -20,8 +20,9 @@ public class MiniRedisController {
 
     @PutMapping("/SET")
     @ResponseStatus(HttpStatus.OK)
-    private String set(@RequestParam String key, @RequestParam String value) throws BusinessException, NotFoundException {
-        return service.setStringValue(key, value);
+    private String set(@RequestParam String key, @RequestParam String value,
+                       @RequestParam(required = false) Integer exSeconds) throws BusinessException, NotFoundException {
+        return service.setKeyValue(key, value, exSeconds);
     }
 
     @GetMapping("/GET/{key}")
